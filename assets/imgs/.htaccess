@@ -1,0 +1,8 @@
+# Defence-in-depth: even if an attacker manages to drop a PHP file in this
+# uploads directory, Apache will refuse to execute it.
+<FilesMatch "\.(php|phtml|phps|php3|php4|php5|php7|pht|phar)$">
+    Require all denied
+</FilesMatch>
+
+# Prevent directory listing
+Options -Indexes
