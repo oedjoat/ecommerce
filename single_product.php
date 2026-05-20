@@ -59,9 +59,9 @@ include __DIR__ . '/layouts/header.php';
                 <h3 class="py-4"><?= e((string)$product['product_name']) ?></h3>
 
                 <!-- Volume pricing table replaces a per-product price tag -->
-                <div style="margin: 10px 0 20px 0;">
+                <div style="margin: 10px 0 20px 0; overflow-x: auto;">
                     <h5 style="margin-bottom:8px;">Volume pricing (per unit)</h5>
-                    <table style="border-collapse: collapse; min-width: 280px;">
+                    <table style="border-collapse: collapse; min-width: 280px; width: 100%;">
                         <thead>
                             <tr style="background:#fb774b;color:#fff;">
                                 <th style="padding:6px 10px;text-align:left;">Quantity</th>
@@ -112,12 +112,14 @@ include __DIR__ . '/layouts/header.php';
             <h3>Related Products</h3>
             <hr class="mx-auto">
         </div>
-        <div class="row mx-auto container-fluid">
+        <div class="container-fluid px-4"><div class="row">
             <?php while ($row = $related->fetch_assoc()): ?>
-                <div class="product text-center col-lg-3 col-md-4 col-sm-12">
+                <div class="product text-center col-lg-3 col-md-4 col-sm-6 col-12">
                     <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
-                        <img class="img-fluid mb-3" src="assets/imgs/<?= e((string)$row['product_image']) ?>"
-                             alt="<?= e((string)$row['product_name']) ?>" />
+                        <div class="product-img-wrap">
+                            <img src="assets/imgs/<?= e((string)$row['product_image']) ?>"
+                                 alt="<?= e((string)$row['product_name']) ?>" />
+                        </div>
                     </a>
                     <div class="star">
                         <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
@@ -125,11 +127,11 @@ include __DIR__ . '/layouts/header.php';
                     </div>
                     <h5 class="p-name"><?= e((string)$row['product_name']) ?></h5>
                     <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
-                        <button class="buy-btn">Buy Now</button>
+                        <span class="buy-btn">Buy Now</span>
                     </a>
                 </div>
             <?php endwhile; ?>
-        </div>
+        </div></div>
     </section>
 
     <script>

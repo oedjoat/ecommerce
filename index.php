@@ -6,9 +6,9 @@ include __DIR__ . '/layouts/header.php';
     <!-- Home -->
     <section id='home'>
         <div class="container">
-            <h5>NEW ARRIVALS</h5>
-            <h1><span>Best Prices</span> this Season</h1>
-            <p>Eshop offers the best products for the most affordable prices</p>
+            <h6>New Arrivals</h6>
+            <h1><span>Best Prices</span><br>this Season</h1>
+            <p>Kimmi offers the finest products at the most affordable prices.</p>
             <a href="shop.php"><button>Shop Now</button></a>
         </div>
     </section>
@@ -58,12 +58,16 @@ include __DIR__ . '/layouts/header.php';
             <p>Here you can check out our featured products</p>
         </div>
 
-        <div class="row mx-auto container-fluid">
+        <div class="container-fluid px-4"><div class="row">
             <?php include __DIR__ . '/server/get_featured_products.php'; ?>
             <?php while ($row = $featured_products->fetch_assoc()): ?>
-                <div class="product text-center col-lg-3 col-md-4 col-sm-12">
-                    <img class="img-fluid mb-3" src="assets/imgs/<?= e((string)$row['product_image']) ?>"
-                         alt="<?= e((string)$row['product_name']) ?>" />
+                <div class="product text-center col-lg-3 col-md-4 col-sm-6 col-12">
+                    <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
+                        <div class="product-img-wrap">
+                            <img src="assets/imgs/<?= e((string)$row['product_image']) ?>"
+                                 alt="<?= e((string)$row['product_name']) ?>" />
+                        </div>
+                    </a>
                     <div class="star">
                         <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
                         <i class="fas fa-star"></i><i class="fas fa-star"></i>
@@ -71,11 +75,11 @@ include __DIR__ . '/layouts/header.php';
                     <h5 class="p-name"><?= e((string)$row['product_name']) ?></h5>
                     <h4 class="p-price">$<?= e(number_format((float)$row['product_price'], 2)) ?></h4>
                     <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
-                        <button class="buy-btn">Buy Now</button>
+                        <span class="buy-btn">Buy Now</span>
                     </a>
                 </div>
             <?php endwhile; ?>
-        </div>
+        </div></div>
     </section>
 
     <!-- Banner -->
@@ -88,18 +92,22 @@ include __DIR__ . '/layouts/header.php';
     </section>
 
     <!-- Clothing -->
-    <section id="featured-clothing" class="my-5">
+    <section id="featured-clothing" class="my-5 pb-5">
         <div class="container text-center mt-5 py-5">
             <h3>Clothing</h3>
             <hr class="mx-auto">
             <p>Here you can check out all our offerings</p>
         </div>
-        <div class="row mx-auto container-fluid">
+        <div class="container-fluid px-4"><div class="row">
             <?php include __DIR__ . '/server/get_clothing.php'; ?>
             <?php while ($row = $clothing_products->fetch_assoc()): ?>
-                <div class="product text-center col-lg-3 col-md-4 col-sm-12">
-                    <img class="img-fluid mb-3" src="assets/imgs/<?= e((string)$row['product_image']) ?>"
-                         alt="<?= e((string)$row['product_name']) ?>" />
+                <div class="product text-center col-lg-3 col-md-4 col-sm-6 col-12">
+                    <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
+                        <div class="product-img-wrap">
+                            <img src="assets/imgs/<?= e((string)$row['product_image']) ?>"
+                                 alt="<?= e((string)$row['product_name']) ?>" />
+                        </div>
+                    </a>
                     <div class="star">
                         <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
                         <i class="fas fa-star"></i><i class="fas fa-star"></i>
@@ -107,26 +115,30 @@ include __DIR__ . '/layouts/header.php';
                     <h5 class="p-name"><?= e((string)$row['product_name']) ?></h5>
                     <h4 class="p-price">$<?= e(number_format((float)$row['product_price'], 2)) ?></h4>
                     <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
-                        <button class="buy-btn">Buy Now</button>
+                        <span class="buy-btn">Buy Now</span>
                     </a>
                 </div>
             <?php endwhile; ?>
-        </div>
+        </div></div>
     </section>
 
     <!-- Shoes -->
-    <section id="shoes" class="my-5">
+    <section id="shoes" class="my-5 pb-5">
         <div class="container text-center mt-5 py-5">
             <h3>Shoes</h3>
             <hr class="mx-auto">
             <p>Check out all our shoe offerings</p>
         </div>
-        <div class="row mx-auto container-fluid">
+        <div class="container-fluid px-4"><div class="row">
             <?php include __DIR__ . '/server/get_shoes.php'; ?>
             <?php while ($row = $shoes_products->fetch_assoc()): ?>
-                <div class="product text-center col-lg-3 col-md-4 col-sm-12">
-                    <img class="img-fluid mb-3" src="assets/imgs/<?= e((string)$row['product_image']) ?>"
-                         alt="<?= e((string)$row['product_name']) ?>" />
+                <div class="product text-center col-lg-3 col-md-4 col-sm-6 col-12">
+                    <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
+                        <div class="product-img-wrap">
+                            <img src="assets/imgs/<?= e((string)$row['product_image']) ?>"
+                                 alt="<?= e((string)$row['product_name']) ?>" />
+                        </div>
+                    </a>
                     <div class="star">
                         <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
                         <i class="fas fa-star"></i><i class="fas fa-star"></i>
@@ -134,11 +146,11 @@ include __DIR__ . '/layouts/header.php';
                     <h5 class="p-name"><?= e((string)$row['product_name']) ?></h5>
                     <h4 class="p-price">$<?= e(number_format((float)$row['product_price'], 2)) ?></h4>
                     <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
-                        <button class="buy-btn">Buy Now</button>
+                        <span class="buy-btn">Buy Now</span>
                     </a>
                 </div>
             <?php endwhile; ?>
-        </div>
+        </div></div>
     </section>
 
 <?php include __DIR__ . '/layouts/footer.php'; ?>

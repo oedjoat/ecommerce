@@ -54,47 +54,51 @@ include __DIR__ . '/layouts/header.php';
 ?>
 
     <!-- ORDER Details -->
-    <section id="orders" class="orders container my-5 py-3">
+    <section id="orders" class="orders my-5 py-3">
         <div class="container mt-5">
             <h2 class="font-weight-bold text-center">Order Details</h2>
             <hr class="mx-auto">
         </div>
 
-        <table class="mt-5 pt-5 mx-auto">
-            <tr>
-                <th>Name</th>
-                <th>Price</th>
-                <th>Quantity</th>
-            </tr>
-
-            <?php foreach ($rows as $row): ?>
+        <div class="container" style="overflow-x: auto;">
+            <table class="mt-5 pt-5">
                 <tr>
-                    <td>
-                        <div class="product-info">
-                            <img src="assets/imgs/<?= e((string)$row['product_image']) ?>"
-                                 alt="<?= e((string)$row['product_name']) ?>" />
-                            <div>
-                                <p class="mt-3"><?= e((string)$row['product_name']) ?></p>
-                            </div>
-                        </div>
-                    </td>
-                    <td><span>$<?= e(number_format((float)$row['product_price'], 2)) ?></span></td>
-                    <td><span><?= e((string)$row['product_quantity']) ?></span></td>
+                    <th>Name</th>
+                    <th>Price</th>
+                    <th>Quantity</th>
                 </tr>
-            <?php endforeach; ?>
-        </table>
+
+                <?php foreach ($rows as $row): ?>
+                    <tr>
+                        <td>
+                            <div class="product-info">
+                                <img src="assets/imgs/<?= e((string)$row['product_image']) ?>"
+                                     alt="<?= e((string)$row['product_name']) ?>" />
+                                <div>
+                                    <p class="mt-3"><?= e((string)$row['product_name']) ?></p>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span>$<?= e(number_format((float)$row['product_price'], 2)) ?></span></td>
+                        <td><span><?= e((string)$row['product_quantity']) ?></span></td>
+                    </tr>
+                <?php endforeach; ?>
+            </table>
+        </div>
 
         <?php if ($order_status === 'not paid'): ?>
-            <form style="float: right;" method="POST" action="payment.php">
-                <?= csrf_field() ?>
-                <input type="hidden" name="order_id"
-                       value="<?= e((string)$order_id) ?>" />
-                <input type="hidden" name="order_total_price"
-                       value="<?= e(number_format($order_total_price, 2, '.', '')) ?>" />
-                <input type="hidden" name="order_status"
-                       value="<?= e($order_status) ?>" />
-                <input type="submit" name="order_pay_btn" value="Pay Now" class="btn btn-primary"/>
-            </form>
+            <div class="container d-flex justify-content-end mt-3">
+                <form method="POST" action="payment.php">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="order_id"
+                           value="<?= e((string)$order_id) ?>" />
+                    <input type="hidden" name="order_total_price"
+                           value="<?= e(number_format($order_total_price, 2, '.', '')) ?>" />
+                    <input type="hidden" name="order_status"
+                           value="<?= e($order_status) ?>" />
+                    <input type="submit" name="order_pay_btn" value="Pay Now" class="btn checkout-btn"/>
+                </form>
+            </div>
         <?php endif; ?>
     </section>
 

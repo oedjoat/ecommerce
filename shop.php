@@ -69,26 +69,19 @@ function page_link(int $page, string $category, int $price): string {
 include __DIR__ . '/layouts/header.php';
 ?>
 
-    <style>
-        .product img { width: 100%; height: auto; box-sizing: border-box; object-fit: cover; }
-        .pagination a { color: coral; }
-        .pagination li:hover a { color: #fff; background-color: coral; }
-    </style>
+    <div style="padding-top: 90px;">
+    <div class="container" style="padding-top: 3rem; padding-bottom: 5rem;">
+        <div id="shop-layout">
 
-    <!-- SEARCH -->
-    <section id="search" class="my-5 py-5 ms-2">
-        <div class="container mt-5 py-5">
-            <h3>Search Products</h3>
-            <hr>
-        </div>
+            <!-- SIDEBAR FILTER -->
+            <aside id="search">
+                <h3>Filter</h3>
+                <form action="shop.php" method="POST">
+                    <?= csrf_field() ?>
 
-        <form action="shop.php" method="POST">
-            <?= csrf_field() ?>
-            <div class="row mx-auto container">
-                <div class="col-lg-12 col-md-12 col-sm-12">
-                    <p>Category</p>
+                    <p class="mb-2" style="font-size:0.82rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#191919;">Category</p>
                     <?php foreach ($valid_categories as $idx => $cat): ?>
-                        <div class="form-check">
+                        <div class="form-check mb-1">
                             <input class="form-check-input" value="<?= e($cat) ?>" type="radio"
                                    name="category" id="category_<?= $idx ?>"
                                    <?= $category === $cat ? 'checked' : '' ?>>
@@ -97,82 +90,80 @@ include __DIR__ . '/layouts/header.php';
                             </label>
                         </div>
                     <?php endforeach; ?>
-                </div>
-            </div>
 
-            <div class="row mx-auto container mt-5">
-                <div class="col-lg-12 col-md-12 col-sm-12">
-                    <p>Max price: $<span id="priceValue"><?= e((string)($price ?: 100)) ?></span></p>
-                    <input type="range" class="form-range w-50" name="price"
-                           value="<?= e((string)($price ?: 100)) ?>" min="1" max="1000"
-                           id="customRange2"
-                           oninput="document.getElementById('priceValue').textContent=this.value">
-                    <div class="w-50">
-                        <span style="float: left;">1</span>
-                        <span style="float: right;">1000</span>
+                    <div class="mt-4">
+                        <p class="mb-2" style="font-size:0.82rem;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#191919;">
+                            Max Price: $<span id="priceValue"><?= e((string)($price ?: 1000)) ?></span>
+                        </p>
+                        <input type="range" class="form-range" name="price"
+                               value="<?= e((string)($price ?: 1000)) ?>" min="1" max="1000"
+                               id="customRange2"
+                               oninput="document.getElementById('priceValue').textContent=this.value">
+                        <div class="d-flex justify-content-between" style="font-size:0.78rem;color:#8d8d8d;">
+                            <span>$1</span><span>$1000</span>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            <div class="form-group my-3 mx-3">
-                <input type="submit" name="search" value="Search" class="btn btn-primary">
-                <?php if ($has_filter): ?>
-                    <a href="shop.php" class="btn btn-secondary">Reset</a>
-                <?php endif; ?>
-            </div>
-        </form>
-    </section>
-
-    <!-- PRODUCTS -->
-    <section id="shop" class="my-5 py-5">
-        <div class="container mt-5 py-5">
-            <h3>Our Products</h3>
-            <hr>
-            <p>Here you can check out our products</p>
-        </div>
-
-        <div class="row mx-auto container">
-            <?php while ($row = $products->fetch_assoc()): ?>
-                <div class="product text-center col-lg-3 col-md-4 col-sm-12">
-                    <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
-                        <img class="img-fluid mb-3" src="assets/imgs/<?= e((string)$row['product_image']) ?>"
-                             alt="<?= e((string)$row['product_name']) ?>" />
-                    </a>
-                    <div class="star">
-                        <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
-                        <i class="fas fa-star"></i><i class="fas fa-star"></i>
+                    <div class="mt-4 d-flex gap-2 flex-wrap">
+                        <button type="submit" name="search" style="padding:10px 20px;font-size:0.75rem;">Search</button>
+                        <?php if ($has_filter): ?>
+                            <a href="shop.php" class="btn btn-outline" style="padding:10px 20px;font-size:0.75rem;border:1.5px solid #191919;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;">Reset</a>
+                        <?php endif; ?>
                     </div>
-                    <h5 class="p-name"><?= e((string)$row['product_name']) ?></h5>
-                    <h4 class="p-price">$<?= e(number_format((float)$row['product_price'], 2)) ?></h4>
-                    <a class="btn buy-btn"
-                       href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
-                        Buy Now
-                    </a>
-                </div>
-            <?php endwhile; ?>
+                </form>
+            </aside>
 
-            <nav aria-label="pagination" class="mx-auto">
-                <ul class="pagination mt-5 mx-auto">
-                    <li class="page-item <?= $page_no <= 1 ? 'disabled' : '' ?>">
-                        <a class="page-link"
-                           href="<?= $page_no <= 1 ? '#' : e(page_link($page_no - 1, $category, $price)) ?>">
-                            Previous
-                        </a>
-                    </li>
-                    <?php for ($p = 1; $p <= $total_no_of_pages; $p++): ?>
-                        <li class="page-item <?= $p === $page_no ? 'active' : '' ?>">
-                            <a class="page-link" href="<?= e(page_link($p, $category, $price)) ?>"><?= $p ?></a>
+            <!-- PRODUCTS GRID -->
+            <section id="shop">
+                <div class="shop-section-header">
+                    <h3>Our Products</h3>
+                    <hr>
+                    <p style="margin-top:0.6rem;color:#8d8d8d;font-size:0.9rem;">
+                        <?= $total_records ?> product<?= $total_records !== 1 ? 's' : '' ?> found
+                    </p>
+                </div>
+
+                <div class="row g-4">
+                    <?php while ($row = $products->fetch_assoc()): ?>
+                        <div class="product col-lg-4 col-md-6 col-sm-6 col-12">
+                            <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
+                                <div class="product-img-wrap">
+                                    <img src="assets/imgs/<?= e((string)$row['product_image']) ?>"
+                                         alt="<?= e((string)$row['product_name']) ?>" />
+                                </div>
+                            </a>
+                            <div class="star">
+                                <i class="fas fa-star"></i><i class="fas fa-star"></i><i class="fas fa-star"></i>
+                                <i class="fas fa-star"></i><i class="fas fa-star"></i>
+                            </div>
+                            <h5 class="p-name"><?= e((string)$row['product_name']) ?></h5>
+                            <h4 class="p-price">$<?= e(number_format((float)$row['product_price'], 2)) ?></h4>
+                            <a href="single_product.php?product_id=<?= e((string)(int)$row['product_id']) ?>">
+                                <span class="buy-btn">Buy Now</span>
+                            </a>
+                        </div>
+                    <?php endwhile; ?>
+                </div>
+
+                <nav aria-label="pagination" class="mt-5">
+                    <ul class="pagination">
+                        <li class="page-item <?= $page_no <= 1 ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= $page_no <= 1 ? '#' : e(page_link($page_no - 1, $category, $price)) ?>">Previous</a>
                         </li>
-                    <?php endfor; ?>
-                    <li class="page-item <?= $page_no >= $total_no_of_pages ? 'disabled' : '' ?>">
-                        <a class="page-link"
-                           href="<?= $page_no >= $total_no_of_pages ? '#' : e(page_link($page_no + 1, $category, $price)) ?>">
-                            Next
-                        </a>
-                    </li>
-                </ul>
-            </nav>
-        </div>
-    </section>
+                        <?php for ($p = 1; $p <= $total_no_of_pages; $p++): ?>
+                            <li class="page-item <?= $p === $page_no ? 'active' : '' ?>">
+                                <a class="page-link" href="<?= e(page_link($p, $category, $price)) ?>"><?= $p ?></a>
+                            </li>
+                        <?php endfor; ?>
+                        <li class="page-item <?= $page_no >= $total_no_of_pages ? 'disabled' : '' ?>">
+                            <a class="page-link" href="<?= $page_no >= $total_no_of_pages ? '#' : e(page_link($page_no + 1, $category, $price)) ?>">Next</a>
+                        </li>
+                    </ul>
+                </nav>
+            </section>
+
+        </div><!-- /#shop-layout -->
+    </div>
+    </div>
 
 <?php include __DIR__ . '/layouts/footer.php'; ?>

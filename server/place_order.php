@@ -19,7 +19,7 @@ if (empty($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
     exit;
 }
 
-// ---- Validate user input --------------------------------------------------
+// ---- Validate buyer info --------------------------------------------------
 $name    = trim((string)($_POST['name']    ?? ''));
 $email   = trim((string)($_POST['email']   ?? ''));
 $phone   = trim((string)($_POST['phone']   ?? ''));
@@ -35,7 +35,7 @@ if ($name === '' || mb_strlen($name) > 100
     exit;
 }
 
-// ---- Re-fetch each cart line from DB (no trust of session prices) ---------
+// ---- Re-fetch each cart line from DB --------------------------------------
 $line_items = [];
 $totalQty   = 0;
 
@@ -51,9 +51,7 @@ foreach ($_SESSION['cart'] as $product_id => $cart_row) {
     $product = $stmt->get_result()->fetch_assoc();
     $stmt->close();
 
-    if (!$product) {
-        continue; // product gone; skip
-    }
+    if (!$product) continue;
     $line_items[] = [
         'product_id'       => (int)$product['product_id'],
         'product_name'     => $product['product_name'],
@@ -77,11 +75,29 @@ if ($unitPrice <= 0) {
 }
 $subtotal = round($unitPrice * $totalQty, 2);
 foreach ($line_items as &$li) {
-    $li['product_price'] = $unitPrice; // overrides DB price per business rule
+    $li['product_price'] = $unitPrice;
 }
 unset($li);
 
-// ---- Validate coupon (server-side re-check) -------------------------------
+// ---- Validate + sanitise recipients ---------------------------------------
+if (!recipients_complete()) {
+    header('Location: ../cart.php?message=Please complete recipient details for all items.');
+    exit;
+}
+$rfields = recipient_field_names();
+$recipients_raw = recipients_get();
+$clean_recipients = [];
+for ($i = 0; $i < $totalQty; $i++) {
+    $r   = $recipients_raw[$i] ?? [];
+    $row = [];
+    foreach ($rfields as $f) {
+        $row[$f] = mb_substr(trim((string)($r[$f] ?? '')), 0,
+                             recipient_field_max_length($f));
+    }
+    $clean_recipients[] = $row;
+}
+
+// ---- Validate coupon ------------------------------------------------------
 $user_id        = (int)$_SESSION['user_id'];
 $applied_coupon = coupon_get_applied($conn);
 $discount       = 0.0;
@@ -99,12 +115,12 @@ if ($applied_coupon) {
     }
 }
 
-$shipping   = SHIPPING_FEE;
-$order_cost = round(max(0.0, $subtotal - $discount) + $shipping, 2);
+$shipping     = SHIPPING_FEE;
+$order_cost   = round(max(0.0, $subtotal - $discount) + $shipping, 2);
 $order_status = 'not paid';
 $order_date   = date('Y-m-d H:i:s');
 
-// ---- Insert order + items + coupon redemption in one transaction ----------
+// ---- Persist everything in one transaction --------------------------------
 $conn->begin_transaction();
 
 $stmt = $conn->prepare(
@@ -114,17 +130,12 @@ $stmt = $conn->prepare(
          user_id, user_name, user_email, user_phone, user_city, user_address, order_date)
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 );
-// 15 placeholders, types in column order:
-//   order_cost(d) subtotal(d) shipping(d) discount_amount(d) coupon_id(i)
-//   tier_unit_price(d) total_quantity(i) order_status(s)
-//   user_id(i) user_name(s) user_email(s) user_phone(s) user_city(s) user_address(s) order_date(s)
 $stmt->bind_param(
-    'ddddidisissssss',
+    'ddddidisisssssss',
     $order_cost, $subtotal, $shipping, $discount, $coupon_id,
     $unitPrice, $totalQty, $order_status,
     $user_id, $name, $email, $phone, $city, $address, $order_date
 );
-
 if (!$stmt->execute()) {
     $conn->rollback();
     error_log('Order insert failed');
@@ -144,14 +155,8 @@ $itemStmt = $conn->prepare(
 foreach ($line_items as $li) {
     $itemStmt->bind_param(
         'iissdiis',
-        $order_id,
-        $li['product_id'],
-        $li['product_name'],
-        $li['product_image'],
-        $li['product_price'],
-        $li['product_quantity'],
-        $user_id,
-        $order_date
+        $order_id, $li['product_id'], $li['product_name'], $li['product_image'],
+        $li['product_price'], $li['product_quantity'], $user_id, $order_date
     );
     if (!$itemStmt->execute()) {
         $conn->rollback();
@@ -161,6 +166,31 @@ foreach ($line_items as $li) {
     }
 }
 $itemStmt->close();
+
+// Recipients - built dynamically from recipient_field_names() so adding or
+// renaming a field is a one-line change in config.php.
+$cols  = array_merge(['order_id', 'seq'], $rfields);
+$placeholders = implode(',', array_fill(0, count($cols), '?'));
+$colSql = '`' . implode('`,`', $cols) . '`';
+$types  = 'ii' . str_repeat('s', count($rfields)); // 2 ints + N strings
+
+$recSql = "INSERT INTO order_recipients ($colSql) VALUES ($placeholders)";
+$recStmt = $conn->prepare($recSql);
+
+$seq = 0;
+foreach ($clean_recipients as $r) {
+    $seq++;
+    $values = [$order_id, $seq];
+    foreach ($rfields as $f) $values[] = $r[$f];
+    $recStmt->bind_param($types, ...$values);
+    if (!$recStmt->execute()) {
+        $conn->rollback();
+        error_log('Recipient insert failed');
+        header('Location: ../checkout.php?message=Could not place order, please try again.');
+        exit;
+    }
+}
+$recStmt->close();
 
 // Coupon redemption
 if ($coupon_id !== null && $discount > 0) {
@@ -180,12 +210,11 @@ if ($coupon_id !== null && $discount > 0) {
 
 $conn->commit();
 
-// Clear cart + coupon now that order is safely persisted
 unset($_SESSION['cart'], $_SESSION['total'], $_SESSION['quantity']);
 coupon_clear_session();
+recipients_clear();
 $_SESSION['order_id'] = $order_id;
 
-// ---- Send order-placed emails (best effort) -------------------------------
 try {
     $orderForEmail = [
         'order_id'        => $order_id,
@@ -201,6 +230,7 @@ try {
         'tier_unit_price' => $unitPrice,
         'total_quantity'  => $totalQty,
         'coupon_code'     => $coupon_code,
+        'recipients'      => $clean_recipients,
     ];
     send_order_placed_emails($orderForEmail, $line_items);
 } catch (Throwable $t) {

@@ -3,7 +3,6 @@
 
 require_once __DIR__ . '/connection.php';
 
-// Composer autoload - resolved relative to project root.
 $__autoload = __DIR__ . '/../vendor/autoload.php';
 if (is_readable($__autoload)) {
     require_once $__autoload;
@@ -12,10 +11,6 @@ if (is_readable($__autoload)) {
 use PHPMailer\PHPMailer\PHPMailer;
 use PHPMailer\PHPMailer\Exception as MailException;
 
-/**
- * Send an HTML email via configured SMTP.
- * Returns true on success, false on failure (and logs).
- */
 function send_mail(string $toAddr, string $toName, string $subject, string $htmlBody, string $textBody = ''): bool {
     global $SMTP_HOST, $SMTP_PORT, $SMTP_USER, $SMTP_PASS, $SMTP_ENCRYPTION,
            $MAIL_FROM_ADDR, $MAIL_FROM_NAME;
@@ -62,10 +57,6 @@ function send_mail(string $toAddr, string $toName, string $subject, string $html
     }
 }
 
-/**
- * Render the line-items HTML/text table for the order confirmation emails.
- * @param array $items Each: product_name, product_quantity, product_price
- */
 function render_order_items_html(array $items): string {
     $rows = '';
     foreach ($items as $li) {
@@ -101,15 +92,46 @@ function render_order_items_text(array $items): string {
     return $out;
 }
 
-/**
- * Send order-placed confirmation to the customer AND a notification to admin.
- *
- * @param array $order   Associative order row with: order_id, subtotal, shipping,
- *                        discount_amount, order_cost, user_name, user_email,
- *                        user_phone, user_city, user_address, total_quantity,
- *                        tier_unit_price, coupon_code (optional)
- * @param array $items   line items (see render_order_items_*)
- */
+/** Per-recipient labeled block; renders every field returned by recipient_field_names(). */
+function render_recipients_html(array $recipients): string {
+    if (empty($recipients)) return '';
+    $fields = recipient_field_names();
+    $out = '';
+    foreach ($recipients as $i => $r) {
+        $idx = (int)$i + 1;
+        $rows = '';
+        foreach ($fields as $f) {
+            $rows .= '<tr>'
+                . '<td style="padding:4px 8px;color:#555;width:90px;border-bottom:1px solid #f3f3f3;">'
+                . htmlspecialchars((string)$f, ENT_QUOTES, 'UTF-8') . '</td>'
+                . '<td style="padding:4px 8px;border-bottom:1px solid #f3f3f3;">'
+                . htmlspecialchars((string)($r[$f] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+                . '</tr>';
+        }
+        $out .= '<div style="border:1px solid #e3e3e3;border-radius:4px;padding:10px 14px;margin-bottom:10px;">'
+              . '<div style="font-weight:600;margin-bottom:4px;">Recipient #' . $idx . '</div>'
+              . '<table style="border-collapse:collapse;width:100%;font-family:Arial,sans-serif;font-size:13px;">'
+              . $rows
+              . '</table></div>';
+    }
+    return $out;
+}
+
+function render_recipients_text(array $recipients): string {
+    if (empty($recipients)) return '';
+    $fields = recipient_field_names();
+    $out = "Recipients:\n";
+    foreach ($recipients as $i => $r) {
+        $idx = (int)$i + 1;
+        $out .= "  #$idx\n";
+        foreach ($fields as $f) {
+            $v = (string)($r[$f] ?? '');
+            $out .= "    $f: $v\n";
+        }
+    }
+    return $out;
+}
+
 function send_order_placed_emails(array $order, array $items): void {
     global $ADMIN_EMAIL;
 
@@ -126,16 +148,20 @@ function send_order_placed_emails(array $order, array $items): void {
     $tierPrice  = (float)$order['tier_unit_price'];
     $totalQty   = (int)$order['total_quantity'];
     $couponCode = isset($order['coupon_code']) ? (string)$order['coupon_code'] : '';
+    $recipients = isset($order['recipients']) && is_array($order['recipients'])
+                    ? $order['recipients'] : [];
 
-    $itemsHtml = render_order_items_html($items);
-    $itemsText = render_order_items_text($items);
+    $itemsHtml      = render_order_items_html($items);
+    $itemsText      = render_order_items_text($items);
+    $recipientsHtml = render_recipients_html($recipients);
+    $recipientsText = render_recipients_text($recipients);
 
     $couponLine = $couponCode !== ''
         ? '<tr><td>Coupon (' . htmlspecialchars($couponCode, ENT_QUOTES, 'UTF-8') . ')</td><td style="text-align:right;">-$' . number_format($discount, 2) . '</td></tr>'
         : '';
 
-    $shipBlock = '
-        <p style="margin:0 0 4px 0;"><strong>Ship to:</strong></p>
+    $billingBlock = '
+        <p style="margin:0 0 4px 0;"><strong>Billing contact:</strong></p>
         <p style="margin:0;">' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '<br>'
         . htmlspecialchars($address, ENT_QUOTES, 'UTF-8') . '<br>'
         . htmlspecialchars($city, ENT_QUOTES, 'UTF-8') . '<br>'
@@ -150,41 +176,45 @@ function send_order_placed_emails(array $order, array $items): void {
             <tr><td><strong>Total</strong></td><td style="text-align:right;"><strong>$' . number_format($total, 2) . '</strong></td></tr>
         </table>';
 
-    // ----- Customer email --------------------------------------------------
+    $recipientsSection = $recipientsHtml === '' ? '' : '
+        <h3 style="margin-top:20px;font-size:16px;">Recipients (' . count($recipients) . ')</h3>
+        ' . $recipientsHtml;
+
     $customerHtml = '
-        <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;">
+        <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;">
             <h2 style="color:#fb774b;">Thanks for your order, ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '!</h2>
             <p>Your order <strong>#' . $oid . '</strong> has been received. Please complete payment to confirm it.</p>
             ' . $itemsHtml . '
             ' . $totalsTable . '
-            ' . $shipBlock . '
+            ' . $recipientsSection . '
+            <div style="margin-top:18px;">' . $billingBlock . '</div>
             <p style="margin-top:20px;color:#888;font-size:12px;">If you have any questions, just reply to this email.</p>
         </div>';
     $customerText = "Thanks for your order, $name!\n\nOrder #$oid\n\n" . $itemsText .
         "\nSubtotal: $" . number_format($subtotal, 2) .
         ($couponCode !== '' ? "\nCoupon ($couponCode): -$" . number_format($discount, 2) : '') .
         "\nShipping: $" . number_format($shipping, 2) .
-        "\nTotal: $" . number_format($total, 2) .
-        "\n\nShip to: $name, $address, $city. Phone: $phone\n";
+        "\nTotal: $" . number_format($total, 2) . "\n\n" .
+        $recipientsText .
+        "\nBilling: $name, $address, $city. Phone: $phone\n";
 
     send_mail($email, $name, 'Order #' . $oid . ' received', $customerHtml, $customerText);
 
-    // ----- Admin email -----------------------------------------------------
     if ($ADMIN_EMAIL !== '') {
         $adminHtml = '
-            <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;">
+            <div style="font-family:Arial,sans-serif;max-width:680px;margin:0 auto;">
                 <h2>New order #' . $oid . '</h2>
                 <p>Customer: ' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . ' &lt;' . htmlspecialchars($email, ENT_QUOTES, 'UTF-8') . '&gt;</p>
                 ' . $itemsHtml . '
                 ' . $totalsTable . '
-                ' . $shipBlock . '
+                ' . $recipientsSection . '
+                <div style="margin-top:18px;">' . $billingBlock . '</div>
             </div>';
         send_mail($ADMIN_EMAIL, 'Admin', '[Kimmi] New order #' . $oid . ' - $' . number_format($total, 2),
-                  $adminHtml, "New order #$oid from $name <$email>\nTotal: $" . number_format($total, 2));
+                  $adminHtml, "New order #$oid from $name <$email>\nTotal: $" . number_format($total, 2) . "\n\n" . $recipientsText);
     }
 }
 
-/** Send a "payment received" confirmation to the customer and admin. */
 function send_payment_confirmed_emails(array $order, string $provider, string $transactionId): void {
     global $ADMIN_EMAIL;
 

@@ -45,14 +45,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
     }
 }
 
-// ---- Get orders -----------------------------------------------------------
+// ---- Fetch orders --------------------------------------------------------
 $user_id = (int)$_SESSION['user_id'];
 $stmt = $conn->prepare(
-    "SELECT order_id, order_cost, order_status, order_date FROM orders WHERE user_id=? ORDER BY order_date DESC"
+    "SELECT order_id, order_cost, order_status, order_date
+     FROM orders WHERE user_id=? ORDER BY order_date DESC"
 );
 $stmt->bind_param('i', $user_id);
 $stmt->execute();
-$orders = $stmt->get_result();
+$res = $stmt->get_result();
+$orders = [];
+$order_ids = [];
+while ($r = $res->fetch_assoc()) {
+    $orders[] = $r;
+    $order_ids[] = (int)$r['order_id'];
+}
+$stmt->close();
+
+// ---- Bulk-fetch recipients for those orders ------------------------------
+$rfields = recipient_field_names();
+$recipients_by_order = [];
+if (!empty($order_ids)) {
+    // Safe to interpolate ids since they came straight from the DB as ints.
+    $idList = implode(',', array_map('intval', $order_ids));
+    $colSql = '`' . implode('`,`', $rfields) . '`';
+    $sql = "SELECT order_id, seq, $colSql FROM order_recipients
+            WHERE order_id IN ($idList) ORDER BY order_id, seq";
+    if ($rres = $conn->query($sql)) {
+        while ($row = $rres->fetch_assoc()) {
+            $recipients_by_order[(int)$row['order_id']][] = $row;
+        }
+        $rres->free();
+    }
+}
 
 include __DIR__ . '/layouts/header.php';
 ?>
@@ -129,9 +154,14 @@ include __DIR__ . '/layouts/header.php';
                 <th>Order Status</th>
                 <th>Order Date</th>
                 <th>Order Details</th>
+                <th>Recipients</th>
             </tr>
 
-            <?php while ($row = $orders->fetch_assoc()): ?>
+            <?php foreach ($orders as $row): ?>
+                <?php
+                    $oid = (int)$row['order_id'];
+                    $rec = $recipients_by_order[$oid] ?? [];
+                ?>
                 <tr>
                     <td><span><?= e((string)$row['order_id']) ?></span></td>
                     <td><span>$<?= e(number_format((float)$row['order_cost'], 2)) ?></span></td>
@@ -145,8 +175,45 @@ include __DIR__ . '/layouts/header.php';
                                    type="submit" value="Details" />
                         </form>
                     </td>
+                    <td><span><?= count($rec) ?></span></td>
                 </tr>
-            <?php endwhile; ?>
+                <?php if (!empty($rec)): ?>
+                <tr>
+                    <td colspan="6" style="padding:0 20px 12px 20px;">
+                        <details style="border:1px solid #eee; padding:8px 12px; border-radius:4px;">
+                            <summary style="cursor:pointer; font-weight:600;">
+                                Recipients for order #<?= $oid ?> (<?= count($rec) ?>)
+                            </summary>
+                            <div style="margin-top:8px;">
+                                <?php foreach ($rec as $r): ?>
+                                    <div style="border:1px solid #f1f1f1; padding:6px 10px; margin-bottom:6px; border-radius:3px;">
+                                        <div style="font-weight:600;font-size:0.9rem;margin-bottom:4px;">
+                                            Recipient #<?= e((string)$r['seq']) ?>
+                                        </div>
+                                        <table style="border-collapse:collapse;font-size:0.85rem;width:100%;">
+                                            <?php foreach ($rfields as $f): ?>
+                                                <tr>
+                                                    <td style="padding:2px 8px;color:#666;width:150px;border-bottom:1px solid #f6f6f6;">
+                                                        <?= e(recipient_field_label($f)) ?>
+                                                    </td>
+                                                    <td style="padding:2px 8px;border-bottom:1px solid #f6f6f6;">
+                                                        <?= e((string)($r[$f] ?? '')) ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </table>
+                                    </div>
+                                <?php endforeach; ?>
+                            </div>
+                        </details>
+                    </td>
+                </tr>
+                <?php endif; ?>
+            <?php endforeach; ?>
+
+            <?php if (empty($orders)): ?>
+                <tr><td colspan="6" class="text-center">You have no orders yet.</td></tr>
+            <?php endif; ?>
         </table>
     </section>
 

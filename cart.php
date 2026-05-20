@@ -1,9 +1,6 @@
 <?php
 require_once __DIR__ . '/server/connection.php';
 
-// ---- Helpers --------------------------------------------------------------
-
-/** Load product from DB; cart never trusts client-supplied price/name. */
 function fetch_product(mysqli $conn, int $product_id): ?array {
     $stmt = $conn->prepare(
         "SELECT product_id, product_name, product_image
@@ -17,10 +14,6 @@ function fetch_product(mysqli $conn, int $product_id): ?array {
     return $row ?: null;
 }
 
-/**
- * Recompute totals using the tiered unit price (based on TOTAL cart quantity).
- * Sets $_SESSION['total'] (subtotal) and $_SESSION['quantity'].
- */
 function recalc_cart(): void {
     $total_quantity = cart_total_quantity();
     $unit_price     = tier_unit_price($total_quantity);
@@ -29,17 +22,15 @@ function recalc_cart(): void {
     $_SESSION['quantity'] = $total_quantity;
 }
 
-// ---- Handle POSTs ---------------------------------------------------------
+// ---- POST handlers -------------------------------------------------------
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrf_check();
 
-    // --- Add a product ------------------------------------------------------
     if (isset($_POST['add_to_cart'])) {
         $product_id = (int)($_POST['product_id'] ?? 0);
         $qty        = max(1, min(99, (int)($_POST['product_quantity'] ?? 1)));
         $product    = $product_id > 0 ? fetch_product($conn, $product_id) : null;
-
         if ($product) {
             if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
                 $_SESSION['cart'] = [];
@@ -57,14 +48,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
     }
-
-    // --- Remove ------------------------------------------------------------
     elseif (isset($_POST['remove_product'])) {
         $product_id = (int)($_POST['product_id'] ?? 0);
         unset($_SESSION['cart'][$product_id]);
     }
-
-    // --- Edit qty ----------------------------------------------------------
     elseif (isset($_POST['edit_quantity'])) {
         $product_id = (int)($_POST['product_id'] ?? 0);
         $qty        = max(1, min(99, (int)($_POST['product_quantity'] ?? 1)));
@@ -72,8 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['cart'][$product_id]['product_quantity'] = $qty;
         }
     }
-
-    // --- Apply coupon ------------------------------------------------------
     elseif (isset($_POST['apply_coupon'])) {
         recalc_cart();
         $code     = (string)($_POST['coupon_code'] ?? '');
@@ -81,7 +66,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user_id  = (int)($_SESSION['user_id'] ?? 0);
         $coupon   = coupon_find_by_code($conn, $code);
         $check    = coupon_validate($conn, $coupon, $subtotal, $user_id);
-
         if ($check['ok']) {
             coupon_apply_session($check['coupon']['code']);
             $_SESSION['coupon_message'] = ['ok', 'Coupon ' . $check['coupon']['code'] . ' applied.'];
@@ -90,50 +74,84 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['coupon_message'] = ['err', $check['error'] ?? 'Invalid coupon.'];
         }
     }
-
-    // --- Remove coupon -----------------------------------------------------
     elseif (isset($_POST['remove_coupon'])) {
         coupon_clear_session();
         $_SESSION['coupon_message'] = ['ok', 'Coupon removed.'];
     }
+    elseif (isset($_POST['save_recipients'])) {
+        $need = cart_total_quantity();
+        $submitted = $_POST['recipients'] ?? [];
+        $clean = [];
+        $errors = [];
+        $fields = recipient_field_names();
+
+        for ($i = 0; $i < $need; $i++) {
+            $r = is_array($submitted[$i] ?? null) ? $submitted[$i] : [];
+            $row = [];
+            $rowErr = false;
+            foreach ($fields as $f) {
+                $v = trim((string)($r[$f] ?? ''));
+                $row[$f] = $v;
+                if ($v === '') $rowErr = true;
+                elseif (mb_strlen($v) > recipient_field_max_length($f)) $rowErr = true;
+            }
+            $clean[$i] = $row;
+            if ($rowErr) $errors[] = '#' . ($i + 1);
+        }
+        recipients_set($clean);
+
+        if ($errors) {
+            $_SESSION['recipients_message'] = ['err',
+                'Some recipients incomplete or invalid: ' . implode(', ', $errors)];
+        } else {
+            $_SESSION['recipients_message'] = ['ok',
+                'Recipients saved (' . $need . ' of ' . $need . ' complete).'];
+        }
+    }
 
     recalc_cart();
-
-    // PRG so refresh doesn't re-submit
+    recipients_resize_to_cart();
     header('Location: cart.php');
     exit;
 }
 
-// Make sure totals are present on first GET, and validate any session coupon
+// ---- GET rendering -------------------------------------------------------
+
 recalc_cart();
+recipients_resize_to_cart();
+
 $subtotal = (float)($_SESSION['total'] ?? 0);
 $user_id  = (int)($_SESSION['user_id'] ?? 0);
 
 $applied_coupon = coupon_get_applied($conn);
-$discount       = 0.0;
+$discount = 0.0;
 if ($applied_coupon) {
     $check = coupon_validate($conn, $applied_coupon, $subtotal, $user_id);
     if ($check['ok']) {
         $discount = $check['discount'];
     } else {
-        // Coupon no longer valid (e.g. dropped below min_order); drop it silently.
         coupon_clear_session();
         $applied_coupon = null;
         $_SESSION['coupon_message'] = ['err', $check['error'] ?? 'Coupon no longer applies.'];
     }
 }
 
-$shipping = $subtotal > 0 ? SHIPPING_FEE : 0.00;
-$grand    = max(0.0, $subtotal - $discount) + $shipping;
-$unitPrice = tier_unit_price(cart_total_quantity());
+$shipping  = $subtotal > 0 ? SHIPPING_FEE : 0.00;
+$grand     = max(0.0, $subtotal - $discount) + $shipping;
+$totalQty  = cart_total_quantity();
+$unitPrice = tier_unit_price($totalQty);
 
-$coupon_message = $_SESSION['coupon_message'] ?? null;
-unset($_SESSION['coupon_message']);
+$coupon_message     = $_SESSION['coupon_message']     ?? null;
+$recipients_message = $_SESSION['recipients_message'] ?? null;
+unset($_SESSION['coupon_message'], $_SESSION['recipients_message']);
+
+$recipients      = recipients_get();
+$recipients_done = recipients_complete();
+$rfields         = recipient_field_names();
 
 include __DIR__ . '/layouts/header.php';
 ?>
 
-<!-- CART -->
 <section class="cart container my-5 py-5">
     <div class="container mt-5">
         <h2 class="font-weight-bold">Your Cart</h2>
@@ -148,12 +166,7 @@ include __DIR__ . '/layouts/header.php';
     </div>
 
     <table class="mt-5 pt-5">
-        <tr>
-            <th>Product</th>
-            <th>Quantity</th>
-            <th>Subtotal</th>
-        </tr>
-
+        <tr><th>Product</th><th>Quantity</th><th>Subtotal</th></tr>
         <?php if (!empty($_SESSION['cart'])): ?>
             <?php foreach ($_SESSION['cart'] as $value): ?>
                 <tr>
@@ -167,32 +180,22 @@ include __DIR__ . '/layouts/header.php';
                                 <br>
                                 <form method="POST" action="cart.php">
                                     <?= csrf_field() ?>
-                                    <input type="hidden" name="product_id"
-                                           value="<?= e((string)$value['product_id']) ?>" />
-                                    <input type="submit" name="remove_product"
-                                           class="remove-btn" value="remove" />
+                                    <input type="hidden" name="product_id" value="<?= e((string)$value['product_id']) ?>" />
+                                    <input type="submit" name="remove_product" class="remove-btn" value="remove" />
                                 </form>
                             </div>
                         </div>
                     </td>
-
                     <td>
                         <form method="POST" action="cart.php">
                             <?= csrf_field() ?>
-                            <input type="hidden" name="product_id"
-                                   value="<?= e((string)$value['product_id']) ?>" />
-                            <input type="number" name="product_quantity"
-                                   min="1" max="99"
+                            <input type="hidden" name="product_id" value="<?= e((string)$value['product_id']) ?>" />
+                            <input type="number" name="product_quantity" min="1" max="99"
                                    value="<?= e((string)$value['product_quantity']) ?>">
                             <input type="submit" class="edit-btn" value="edit" name="edit_quantity" />
                         </form>
                     </td>
-
-                    <td>
-                        $<span class="product-price">
-                            <?= e(number_format((float)$value['product_quantity'] * $unitPrice, 2)) ?>
-                        </span>
-                    </td>
+                    <td>$<span><?= e(number_format((float)$value['product_quantity'] * $unitPrice, 2)) ?></span></td>
                 </tr>
             <?php endforeach; ?>
         <?php else: ?>
@@ -201,41 +204,32 @@ include __DIR__ . '/layouts/header.php';
     </table>
 
     <?php if (!empty($_SESSION['cart'])): ?>
-        <!-- COUPON -->
         <div class="cart-total" style="margin-top: 30px;">
             <table>
                 <?php if ($coupon_message): ?>
-                    <tr>
-                        <td colspan="2" style="color: <?= $coupon_message[0] === 'ok' ? 'green' : 'red' ?>;">
-                            <?= e($coupon_message[1]) ?>
-                        </td>
-                    </tr>
+                    <tr><td colspan="2" style="color: <?= $coupon_message[0] === 'ok' ? 'green' : 'red' ?>;">
+                        <?= e($coupon_message[1]) ?>
+                    </td></tr>
                 <?php endif; ?>
-
                 <?php if ($applied_coupon): ?>
                     <tr>
                         <td>
                             Coupon: <strong><?= e((string)$applied_coupon['code']) ?></strong>
                             <form method="POST" action="cart.php" style="display:inline;">
                                 <?= csrf_field() ?>
-                                <input type="submit" name="remove_coupon" value="remove"
-                                       class="remove-btn" style="padding:0 0 0 8px;" />
+                                <input type="submit" name="remove_coupon" value="remove" class="remove-btn" style="padding:0 0 0 8px;" />
                             </form>
                         </td>
                         <td style="text-align:right;">-$<?= e(number_format($discount, 2)) ?></td>
                     </tr>
                 <?php else: ?>
-                    <tr>
-                        <td colspan="2">
-                            <form method="POST" action="cart.php" style="display:flex; gap:8px;">
-                                <?= csrf_field() ?>
-                                <input type="text" name="coupon_code" placeholder="Coupon code"
-                                       maxlength="50" style="flex:1;padding:6px;" />
-                                <input type="submit" name="apply_coupon" value="Apply"
-                                       class="edit-btn" style="padding:6px 12px;" />
-                            </form>
-                        </td>
-                    </tr>
+                    <tr><td colspan="2">
+                        <form method="POST" action="cart.php" style="display:flex; gap:8px;">
+                            <?= csrf_field() ?>
+                            <input type="text" name="coupon_code" placeholder="Coupon code" maxlength="50" style="flex:1;padding:6px;" />
+                            <input type="submit" name="apply_coupon" value="Apply" class="edit-btn" style="padding:6px 12px;" />
+                        </form>
+                    </td></tr>
                 <?php endif; ?>
             </table>
         </div>
@@ -243,26 +237,84 @@ include __DIR__ . '/layouts/header.php';
 
     <div class="cart-total">
         <table>
-            <tr><td>Subtotal</td>
-                <td>$<?= e(number_format($subtotal, 2)) ?></td></tr>
+            <tr><td>Subtotal</td><td>$<?= e(number_format($subtotal, 2)) ?></td></tr>
             <?php if ($discount > 0): ?>
-                <tr><td>Discount</td>
-                    <td>-$<?= e(number_format($discount, 2)) ?></td></tr>
+                <tr><td>Discount</td><td>-$<?= e(number_format($discount, 2)) ?></td></tr>
             <?php endif; ?>
-            <tr><td>Shipping</td>
-                <td>$<?= e(number_format($shipping, 2)) ?></td></tr>
-            <tr><td><strong>Total</strong></td>
-                <td><strong>$<?= e(number_format($grand, 2)) ?></strong></td></tr>
+            <tr><td>Shipping</td><td>$<?= e(number_format($shipping, 2)) ?></td></tr>
+            <tr><td><strong>Total</strong></td><td><strong>$<?= e(number_format($grand, 2)) ?></strong></td></tr>
         </table>
     </div>
 
-    <?php if (!empty($_SESSION['cart'])): ?>
-    <div class="checkout-container">
-        <form method="POST" action="checkout.php">
+    <!-- RECIPIENTS - 19 fields per recipient, labels from recipient_field_label() -->
+    <?php if ($totalQty > 0): ?>
+    <div style="margin-top: 40px;">
+        <h3 style="font-weight: 600;">Recipients</h3>
+        <hr style="width: 40px; background-color: #fb774b; height: 3px; border: 0; opacity: 1;">
+        <p class="text-muted" style="font-size:0.9rem;">
+            Fill in details for each of the <strong><?= $totalQty ?></strong>
+            item<?= $totalQty === 1 ? '' : 's' ?> in your cart. Changing the cart
+            quantity automatically adjusts the form count.
+        </p>
+
+        <?php if ($recipients_message): ?>
+            <p style="color: <?= $recipients_message[0] === 'ok' ? 'green' : 'red' ?>; font-weight: 600;">
+                <?= e($recipients_message[1]) ?>
+            </p>
+        <?php endif; ?>
+
+        <form method="POST" action="cart.php">
             <?= csrf_field() ?>
-            <input type="submit" class="btn checkout-btn" value="Checkout" name="checkout" />
+            <?php for ($i = 0; $i < $totalQty; $i++):
+                $r = $recipients[$i] ?? [];
+                $isComplete = true;
+                foreach ($rfields as $f) {
+                    if (trim((string)($r[$f] ?? '')) === '') { $isComplete = false; break; }
+                }
+            ?>
+                <fieldset style="border: 1px solid #ddd; padding: 14px 18px; margin-bottom: 14px; border-radius: 4px;">
+                    <legend style="width:auto;padding:0 8px;font-size:0.95rem;">
+                        Recipient #<?= $i + 1 ?>
+                        <?php if ($isComplete): ?>
+                            <span style="color:green;font-weight:600;">&#10004;</span>
+                        <?php endif; ?>
+                    </legend>
+                    <div class="row">
+                        <?php foreach ($rfields as $f):
+                            $val = (string)($r[$f] ?? '');
+                        ?>
+                            <div class="form-group col-md-6 col-lg-4 mb-2">
+                                <label><?= e(recipient_field_label($f)) ?></label>
+                                <input type="text" class="form-control"
+                                       maxlength="<?= (int)recipient_field_max_length($f) ?>"
+                                       required
+                                       name="recipients[<?= $i ?>][<?= e($f) ?>]"
+                                       value="<?= e($val) ?>">
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </fieldset>
+            <?php endfor; ?>
+
+            <button type="submit" name="save_recipients" class="btn btn-primary">Save Recipients</button>
         </form>
     </div>
+    <?php endif; ?>
+
+    <?php if (!empty($_SESSION['cart'])): ?>
+        <?php if ($recipients_done): ?>
+            <div class="checkout-container" style="margin-top: 24px;">
+                <form method="POST" action="checkout.php">
+                    <?= csrf_field() ?>
+                    <input type="submit" class="btn checkout-btn" value="Checkout" name="checkout" />
+                </form>
+            </div>
+        <?php else: ?>
+            <div style="margin-top: 24px; text-align: right; color: #888; font-style: italic;">
+                Fill in and save details for all <?= $totalQty ?> recipient<?= $totalQty === 1 ? '' : 's' ?>
+                to continue to checkout.
+            </div>
+        <?php endif; ?>
     <?php endif; ?>
 </section>
 
