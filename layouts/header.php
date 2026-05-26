@@ -25,7 +25,7 @@ require_once __DIR__ . '/../config.php';
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse nav-buttons" id="navbarSupportedContent">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
                     <li class="nav-item"><a class="nav-link" href="index.php">Home</a></li>
                     <li class="nav-item"><a class="nav-link" href="shop.php">Shop</a></li>
                     <li class="nav-item"><a class="nav-link" href="contact.php">Contact Us</a></li>

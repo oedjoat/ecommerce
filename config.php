@@ -295,13 +295,11 @@ function recipients_complete(): bool {
     if ($need <= 0) return false;
     $list = recipients_get();
     if (count($list) < $need) return false;
-    $fields = recipient_field_names();
     for ($i = 0; $i < $need; $i++) {
         $r = $list[$i] ?? [];
-        foreach ($fields as $f) {
+        foreach (['foo1', 'foo17'] as $f) {
             $v = trim((string)($r[$f] ?? ''));
-            if ($v === '') return false;
-            if (mb_strlen($v) > recipient_field_max_length($f)) return false;
+            if ($v === '' || mb_strlen($v) > recipient_field_max_length($f)) return false;
         }
     }
     return true;

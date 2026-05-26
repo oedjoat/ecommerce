@@ -85,6 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $errors = [];
         $fields = recipient_field_names();
 
+        $requiredFields = ['foo1', 'foo17'];
         for ($i = 0; $i < $need; $i++) {
             $r = is_array($submitted[$i] ?? null) ? $submitted[$i] : [];
             $row = [];
@@ -92,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach ($fields as $f) {
                 $v = trim((string)($r[$f] ?? ''));
                 $row[$f] = $v;
-                if ($v === '') $rowErr = true;
+                if (in_array($f, $requiredFields) && $v === '') $rowErr = true;
                 elseif (mb_strlen($v) > recipient_field_max_length($f)) $rowErr = true;
             }
             $clean[$i] = $row;
@@ -246,59 +247,107 @@ include __DIR__ . '/layouts/header.php';
         </table>
     </div>
 
-    <!-- RECIPIENTS - 19 fields per recipient, labels from recipient_field_label() -->
+    <!-- RECIPIENTS – collapsible accordion, foo1 + foo17 required -->
     <?php if ($totalQty > 0): ?>
     <div style="margin-top: 40px;">
         <h3 style="font-weight: 600;">Recipients</h3>
         <hr style="width: 40px; background-color: #fb774b; height: 3px; border: 0; opacity: 1;">
         <p class="text-muted" style="font-size:0.9rem;">
             Fill in details for each of the <strong><?= $totalQty ?></strong>
-            item<?= $totalQty === 1 ? '' : 's' ?> in your cart. Changing the cart
-            quantity automatically adjusts the form count.
+            item<?= $totalQty === 1 ? '' : 's' ?> in your cart.
+            <span class="text-danger fw-semibold"><?= e(recipient_field_label('foo1')) ?></span>
+            and
+            <span class="text-danger fw-semibold"><?= e(recipient_field_label('foo17')) ?></span>
+            are required to proceed to checkout.
         </p>
 
         <?php if ($recipients_message): ?>
-            <p style="color: <?= $recipients_message[0] === 'ok' ? 'green' : 'red' ?>; font-weight: 600;">
+            <div class="alert alert-<?= $recipients_message[0] === 'ok' ? 'success' : 'danger' ?> py-2">
                 <?= e($recipients_message[1]) ?>
-            </p>
+            </div>
         <?php endif; ?>
 
-        <form method="POST" action="cart.php">
+        <form method="POST" action="cart.php" id="recipientsForm" novalidate>
             <?= csrf_field() ?>
-            <?php for ($i = 0; $i < $totalQty; $i++):
-                $r = $recipients[$i] ?? [];
-                $isComplete = true;
-                foreach ($rfields as $f) {
-                    if (trim((string)($r[$f] ?? '')) === '') { $isComplete = false; break; }
-                }
-            ?>
-                <fieldset style="border: 1px solid #ddd; padding: 14px 18px; margin-bottom: 14px; border-radius: 4px;">
-                    <legend style="width:auto;padding:0 8px;font-size:0.95rem;">
-                        Recipient #<?= $i + 1 ?>
-                        <?php if ($isComplete): ?>
-                            <span style="color:green;font-weight:600;">&#10004;</span>
-                        <?php endif; ?>
-                    </legend>
-                    <div class="row">
-                        <?php foreach ($rfields as $f):
-                            $val = (string)($r[$f] ?? '');
-                        ?>
-                            <div class="form-group col-md-6 col-lg-4 mb-2">
-                                <label><?= e(recipient_field_label($f)) ?></label>
-                                <input type="text" class="form-control"
-                                       maxlength="<?= (int)recipient_field_max_length($f) ?>"
-                                       required
-                                       name="recipients[<?= $i ?>][<?= e($f) ?>]"
-                                       value="<?= e($val) ?>">
+            <div class="accordion" id="recipientsAccordion">
+                <?php for ($i = 0; $i < $totalQty; $i++):
+                    $r = $recipients[$i] ?? [];
+                    $foo1val  = trim((string)($r['foo1']  ?? ''));
+                    $foo17val = trim((string)($r['foo17'] ?? ''));
+                    $isComplete = ($foo1val !== '' && $foo17val !== '');
+                    $startOpen  = ($i === 0 || !$isComplete);
+                ?>
+                    <div class="accordion-item mb-2 border rounded" style="overflow:hidden;">
+                        <h2 class="accordion-header" id="recHead<?= $i ?>">
+                            <button class="accordion-button <?= $startOpen ? '' : 'collapsed' ?> fw-semibold"
+                                    type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#recBody<?= $i ?>"
+                                    aria-expanded="<?= $startOpen ? 'true' : 'false' ?>"
+                                    aria-controls="recBody<?= $i ?>">
+                                Recipient #<?= $i + 1 ?>
+                                <?php if ($isComplete): ?>
+                                    <span class="badge bg-success ms-2" style="font-size:0.72rem;">&#10004; Ready</span>
+                                <?php else: ?>
+                                    <span class="badge ms-2" style="background:#fb774b;font-size:0.72rem;">Incomplete</span>
+                                <?php endif; ?>
+                            </button>
+                        </h2>
+                        <div id="recBody<?= $i ?>"
+                             class="accordion-collapse collapse <?= $startOpen ? 'show' : '' ?>"
+                             aria-labelledby="recHead<?= $i ?>">
+                            <div class="accordion-body">
+                                <div class="row">
+                                    <?php foreach ($rfields as $f):
+                                        $val = (string)($r[$f] ?? '');
+                                        $required = in_array($f, ['foo1', 'foo17']);
+                                    ?>
+                                        <div class="col-12 col-sm-6 col-lg-4 mb-3">
+                                            <label class="form-label fw-medium" for="rec_<?= $i ?>_<?= e($f) ?>">
+                                                <?= e(recipient_field_label($f)) ?>
+                                                <?php if ($required): ?><span class="text-danger">*</span><?php endif; ?>
+                                            </label>
+                                            <input type="text"
+                                                   id="rec_<?= $i ?>_<?= e($f) ?>"
+                                                   class="form-control"
+                                                   maxlength="<?= (int)recipient_field_max_length($f) ?>"
+                                                   <?= $required ? 'required' : '' ?>
+                                                   name="recipients[<?= $i ?>][<?= e($f) ?>]"
+                                                   value="<?= e($val) ?>">
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </div>
-                        <?php endforeach; ?>
+                        </div>
                     </div>
-                </fieldset>
-            <?php endfor; ?>
+                <?php endfor; ?>
+            </div>
 
-            <button type="submit" name="save_recipients" class="btn btn-primary">Save Recipients</button>
+            <div class="d-flex align-items-center gap-3 mt-3 flex-wrap">
+                <button type="submit" name="save_recipients" class="btn btn-primary">
+                    Save Recipients
+                </button>
+                <small class="text-muted"><span class="text-danger">*</span> Required</small>
+            </div>
         </form>
     </div>
+
+    <script>
+    document.getElementById('recipientsForm').addEventListener('submit', function (e) {
+        var inputs = this.querySelectorAll('input[required]');
+        for (var i = 0; i < inputs.length; i++) {
+            if (!inputs[i].value.trim()) {
+                var pane = inputs[i].closest('.accordion-collapse');
+                if (pane && !pane.classList.contains('show')) {
+                    bootstrap.Collapse.getOrCreateInstance(pane).show();
+                }
+                e.preventDefault();
+                setTimeout(function (el) { el.focus(); el.reportValidity(); }, 300, inputs[i]);
+                return;
+            }
+        }
+    });
+    </script>
     <?php endif; ?>
 
     <?php if (!empty($_SESSION['cart'])): ?>
